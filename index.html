@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>🌻 Feliz San Valentín</title>
+  <style>
+    :root{
+      --sky1:#bfe9ff;
+      --sky2:#fff7d1;
+      --ground1:#9be37d;
+      --ground2:#59c173;
+      --text:#1b1b1b;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      overflow:hidden;
+      background: linear-gradient(180deg, var(--sky1), var(--sky2) 55%, var(--ground1) 55%, var(--ground2));
+      height:100vh;
+      color:var(--text);
+    }
+    canvas{position:fixed; inset:0; width:100%; height:100%;}
+    .card{
+      position:fixed;
+      left:50%;
+      top:9%;
+      transform:translateX(-50%);
+      width:min(92vw, 560px);
+      padding:16px 18px;
+      border-radius:18px;
+      background: rgba(255,255,255,.80);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 10px 30px rgba(0,0,0,.12);
+      text-align:center;
+      z-index:5;
+    }
+    .title{font-size:1.25rem; margin:0 0 6px; font-weight:900;}
+    .msg{margin:0; font-size:1.05rem; line-height:1.35; font-weight:750;}
+    .sub{margin:10px 0 0; font-size:.92rem; opacity:.8;}
+    .row{
+      margin-top:12px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:center;
+    }
+    .btn{
+      display:inline-flex;
+      gap:10px;
+      align-items:center;
+      justify-content:center;
+      padding:10px 14px;
+      border-radius:999px;
+      border:0;
+      cursor:pointer;
+      font-weight:900;
+      background:#ffbf00;
+      box-shadow:0 8px 18px rgba(0,0,0,.12);
+    }
+    .btn.secondary{background:#ffffff}
+    .btn:active{transform:translateY(1px)}
+    .hint{
+      position:fixed;
+      bottom:14px;
+      left:50%;
+      transform:translateX(-50%);
+      background: rgba(255,255,255,.72);
+      padding:8px 12px;
+      border-radius:999px;
+      font-weight:800;
+      box-shadow:0 8px 18px rgba(0,0,0,.10);
+      z-index:5;
+      user-select:none;
+    }
+    #spotifyBox{
+      display:none;
+      margin-top:12px;
+    }
+    #spotifyBox iframe{
+      border-radius:12px;
+      width:100%;
+      height:152px;
+      border:none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="card" role="group" aria-label="Mensaje de San Valentín">
+    <p class="title">🌻 Para ti, mi amor 🌻</p>
+    <p class="msg" id="mensaje">Feliz San Valentín, te amo 💛</p>
+    <p class="sub">Toca la pantalla para que nazcan más girasoles ✨</p>
+
+    <div class="row">
+      <button class="btn" id="btnReplay">💛 Repetir animación</button>
+      <button class="btn secondary" id="btnPerfect">🎵 Perfect</button>
+    </div>
+
+    <div id="spotifyBox">
+      <iframe
+        src="https://open.spotify.com/embed/track/0tgVpDi06FyKpA1z0VMD4v"
+        allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+        loading="lazy">
+      </iframe>
+    </div>
+  </div>
+
+  <div class="hint">👆 Toca para plantar girasoles</div>
+
+  <script>
+    // =========================
+    // PERSONALIZA AQUÍ
+    // =========================
+    const NOMBRE = ""; // ejemplo: "Mi vida"
+    const MENSAJE = "Feliz San Valentín, te amo 💛";
+    // =========================
+
+    const mensajeEl = document.getElementById("mensaje");
+    mensajeEl.textContent = (NOMBRE ? (NOMBRE + ", ") : "") + MENSAJE;
+
+    // Spotify (Perfect)
+    const btnPerfect = document.getElementById("btnPerfect");
+    const spotifyBox = document.getElementById("spotifyBox");
+    const SPOTIFY_TRACK_URL = "https://open.spotify.com/track/0tgVpDi06FyKpA1z0VMD4v";
+
+    btnPerfect.addEventListener("click", (e) => {
+      e.stopPropagation();
+      spotifyBox.style.display = "block";
+
+      // Opcional: abre Spotify en otra pestaña/app (a veces más confiable en móvil)
+      window.open(SPOTIFY_TRACK_URL, "_blank");
+    });
+
+    // Canvas setup
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+
+    let W, H, DPR;
+    function resize(){
+      DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      W = Math.floor(window.innerWidth);
+      H = Math.floor(window.innerHeight);
+      canvas.width = Math.floor(W * DPR);
+      canvas.height = Math.floor(H * DPR);
+      canvas.style.width = W + "px";
+      canvas.style.height = H + "px";
+      ctx.setTransform(DPR,0,0,DPR,0,0);
+    }
+    window.addEventListener("resize", resize);
+    resize();
+
+    // Utils
+    const rand = (a,b)=> a + Math.random()*(b-a);
+    const clamp = (v,a,b)=> Math.max(a, Math.min(b, v));
+    const smooth = (t)=> t*t*(3-2*t); // smoothstep
+    const mix = (a,b,t)=> a + (b-a)*t;
+
+    // Sparkles
+    const sparks = [];
+    function addSpark(x,y){
+      for(let i=0;i<10;i++){
+        sparks.push({
+          x,y,
+          vx: rand(-1.8,1.8),
+          vy: rand(-3.2,-0.8),
+          life: rand(45,80),
+          r: rand(1.2,2.4)
+        });
+      }
+    }
+
+    // Flowers
+    const flowers = [];
+
+    function drawFlower(f, t){
+      // Growth progress
+      const progRaw = (t - f.born) / f.growMs;
+      const prog = clamp(progRaw, 0, 1);
+      const stemP = smooth(clamp(prog / 0.70, 0, 1));           // stem first
+      const headP = smooth(clamp((prog - 0.55) / 0.45, 0, 1));  // head later
+      const petalP = smooth(clamp((prog - 0.68) / 0.32, 0, 1)); // petals last
+
+      ctx.save();
+      ctx.translate(f.x, f.y);
+
+      // gentle swing when grown
+      const swingAmt = f.swing * stemP;
+      ctx.rotate(swingAmt * Math.sin(t*0.002 + f.phase));
+
+      // Current height
+      const cx = 10 * stemP;
+      const cy = -f.h*0.55 * stemP;
+      const ex = -6 * stemP;
+      const ey = -f.h * stemP;
+
+      // Stem
+      ctx.strokeStyle = "#2f8f4e";
+      ctx.lineWidth = 6;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(cx, cy, ex, ey);
+      ctx.stroke();
+
+      // Leaves appear mid-growth
+      const leafP = smooth(clamp((prog - 0.25)/0.35, 0, 1));
+      if (leafP > 0.01){
+        ctx.fillStyle = "#36a95b";
+        ctx.globalAlpha = mix(0, 1, leafP);
+        ctx.beginPath();
+        ctx.ellipse(10*leafP, -f.h*0.45*stemP, 18*leafP, 10*leafP, -0.6, 0, Math.PI*2);
+        ctx.ellipse(-12*leafP, -f.h*0.65*stemP, 16*leafP, 9*leafP, 0.6, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // Move to stem tip
+      ctx.translate(ex, ey);
+
+      // Head
+      if (headP > 0.01){
+        ctx.save();
+        ctx.scale(headP, headP);
+
+        // Petals
+        const petals = f.petals;
+        for(let i=0;i<petals;i++){
+          const a = (i/petals) * Math.PI*2;
+          const wob = 1 + 0.06*Math.sin(t*0.004 + f.phase + i);
+          const pScale = petalP * wob;
+
+          ctx.save();
+          ctx.rotate(a);
+          ctx.fillStyle = "#ffcc33";
+          ctx.beginPath();
+          ctx.ellipse(0, -f.r*0.85, f.r*0.35*pScale, f.r*0.75*pScale, 0, 0, Math.PI*2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Center
+        ctx.fillStyle = "#5a3b1e";
+        ctx.beginPath();
+        ctx.arc(0,0, f.r*0.55, 0, Math.PI*2);
+        ctx.fill();
+
+        // Seeds
+        ctx.fillStyle = "rgba(0,0,0,.18)";
+        const seeds = 42;
+        for(let i=0;i<seeds;i++){
+          const a = (i/seeds)*Math.PI*2;
+          const rr = f.r*0.42 * (0.5 + 0.5*Math.sin(i*12.9898 + f.phase));
+          ctx.beginPath();
+          ctx.arc(Math.cos(a)*rr, Math.sin(a)*rr, 1.2, 0, Math.PI*2);
+          ctx.fill();
+        }
+
+        // Soft highlight
+        const g = ctx.createRadialGradient(-f.r*0.1,-f.r*0.1, 2, 0,0, f.r);
+        g.addColorStop(0, "rgba(255,255,255,.35)");
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(0,0, f.r, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+
+      ctx.restore();
+    }
+
+    function spawnFlower(x = rand(60, W-60), y = H - rand(30, 90)){
+      flowers.push({
+        x,
+        y,
+        h: rand(190, 340),
+        r: rand(26, 46),
+        petals: Math.floor(rand(18, 26)),
+        phase: rand(0, 999),
+        swing: rand(0.03, 0.09),
+        born: performance.now(),
+        growMs: rand(1100, 1700)
+      });
+      addSpark(x, y - rand(140, 260));
+    }
+
+    function seedScene(){
+      flowers.length = 0;
+      sparks.length = 0;
+
+      const count = Math.max(7, Math.floor(W/120));
+      const baseY = H - rand(24, 70);
+
+      for(let i=0;i<count;i++){
+        const delay = i * 160; // wave
+        const x = (i+0.7) * (W/(count+1));
+        const y = baseY - rand(0, 22);
+
+        flowers.push({
+          x, y,
+          h: rand(190, 340),
+          r: rand(26, 46),
+          petals: Math.floor(rand(18, 26)),
+          phase: rand(0, 999),
+          swing: rand(0.03, 0.09),
+          born: performance.now() + delay,
+          growMs: rand(1100, 1700)
+        });
+      }
+    }
+    seedScene();
+
+    // Ground shadow
+    function drawGround(){
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,.08)";
+      ctx.beginPath();
+      ctx.ellipse(W*0.5, H*0.74, W*0.55, H*0.14, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawClouds(t){
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = "#ffffff";
+      for(let i=0;i<4;i++){
+        const cx = (t*0.012 + i*240) % (W+260) - 130;
+        const cy = 70 + i*28;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, 70, 26, 0, 0, Math.PI*2);
+        ctx.ellipse(cx+50, cy-10, 56, 22, 0, 0, Math.PI*2);
+        ctx.ellipse(cx-40, cy-6, 52, 20, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function tick(t){
+      ctx.clearRect(0,0,W,H);
+      drawClouds(t);
+      drawGround();
+
+      flowers.sort((a,b)=> (a.h+a.r) - (b.h+b.r));
+      for(const f of flowers){
+        const prog = clamp((t - f.born)/f.growMs, 0, 1);
+        ctx.save();
+        ctx.globalAlpha = 0.10 + 0.90*smooth(prog);
+        drawFlower(f, t);
+        ctx.restore();
+      }
+
+      // Sparkles
+      for(let i=sparks.length-1;i>=0;i--){
+        const p = sparks[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.06;
+        p.life -= 1;
+        ctx.globalAlpha = Math.max(0, p.life/80);
+        ctx.fillStyle = "#ffd86b";
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+        ctx.fill();
+        if(p.life <= 0) sparks.splice(i,1);
+      }
+      ctx.globalAlpha = 1;
+
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    // Interaction
+    const hint = document.querySelector(".hint");
+    function onTap(ev){
+      if (hint) hint.style.display = "none";
+      const touch = ev.touches ? ev.touches[0] : ev;
+      const x = touch.clientX;
+      const y = Math.max(H*0.45, touch.clientY);
+      spawnFlower(x, y);
+
+      // Bonus: si ella toca la pantalla, también mostramos el reproductor (opcional)
+      // spotifyBox.style.display = "block";
+    }
+    window.addEventListener("click", onTap);
+    window.addEventListener("touchstart", onTap, {passive:true});
+
+    // Replay
+    document.getElementById("btnReplay").addEventListener("click", (e)=>{
+      e.stopPropagation();
+      seedScene();
+      if (hint) hint.style.display = "block";
+      // Opcional: ocultar Spotify cuando reinicia
+      // spotifyBox.style.display = "none";
+    });
+  </script>
+</body>
+</html>
